@@ -13,14 +13,9 @@ module Pebbles
 
         worker = @worker
         @pool = Servolux::Prefork.new(min_workers: @worker_count) do
-          LOGGER.info "spawn"
-          begin
-            $0 = "#{name}: worker"
-            trap('TERM') { worker.stop }
-            worker.run
-          rescue Exception => e
-            LOGGER.info e.to_s
-          end
+          $0 = "#{name}: worker"
+          trap('TERM') { worker.stop }
+          worker.run
         end
       end
 
