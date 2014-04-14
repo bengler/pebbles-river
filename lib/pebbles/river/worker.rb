@@ -17,9 +17,10 @@ module Pebbles
       # Initializes worker with a handler. Options:
       #
       # * `queue`: Same queue options as `River#queue`.
-      # * `on_connection_error`: If provided, call on recovered connection errors.
       # * `on_exception`: If provided, called when a message could not be handled
       #   due to an exception.
+      # * `on_connection_error`: If provided, call on recovered connection errors.
+      #   Uses `on_exception` if not implemented.
       #
       # The handler must implement `call(payload, extra)`, where the payload is
       # the message payload, and the extra argument contains message metadata as
