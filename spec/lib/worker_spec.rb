@@ -119,6 +119,17 @@ describe Worker do
 
         subject.new(null_handler, queue: {name: 'foo'}).run_once
       end
+
+      it 'calls #on_idle if implemented' do
+        queue.stub(:pop) { |&block|
+          block.call({payload: :queue_empty, delivery_details: {}})
+        }
+
+        null_handler.stub(:on_idle) { }
+        expect(null_handler).to receive(:on_idle)
+
+        subject.new(null_handler, queue: {name: 'foo'}).run_once
+      end
     end
 
     context 'when handler is successful' do

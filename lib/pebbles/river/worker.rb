@@ -52,6 +52,9 @@ module Pebbles
           if process_next
             @next_event_time = now
           else
+            if @handler.respond_to?(:on_idle)
+              @handler.on_idle
+            end
             @next_event_time = now + 1
           end
         else
