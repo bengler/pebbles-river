@@ -1,6 +1,17 @@
 module Pebbles
   module River
 
+    class SendFailure < StandardError
+
+      attr_reader :connection_exception
+
+      def initialize(message, connection_exception = nil)
+        super(message)
+        @connection_exception = connection_exception
+      end
+
+    end
+
     class River
 
       attr_reader :environment
@@ -28,9 +39,11 @@ module Pebbles
 
       def publish(options = {})
         connect
-        exchange.publish(options.to_json,
-          persistent: options.fetch(:persistent, true),
-          key: Routing.routing_key_for(options.slice(:event, :uid)))
+        handle_connection_error do
+          exchange.publish(options.to_json,
+            persistent: options.fetch(:persistent, true),
+            key: Routing.routing_key_for(options.slice(:event, :uid)))
+        end
       end
 
       def queue(options = {})
@@ -66,9 +79,34 @@ module Pebbles
           @exchange ||= bunny.exchange(exchange_name, EXCHANGE_OPTIONS.dup)
         end
 
+        def handle_connection_error(&block)
+          retry_until = nil
+          begin
+            yield
+          rescue *CONNECTION_EXCEPTIONS => exception
+            retry_until ||= Time.now + 4
+            if Time.now < retry_until
+              sleep(0.5)
+              retry
+            else
+              raise SendFailure.new(exception.message, exception)
+            end
+          end
+        end
+
         QUEUE_OPTIONS = {durable: true}.freeze
 
         EXCHANGE_OPTIONS = {type: :topic, durable: :true}.freeze
+
+        CONNECTION_EXCEPTIONS = [
+          Bunny::ConnectionError,
+          Bunny::ForcedChannelCloseError,
+          Bunny::ForcedConnectionCloseError,
+          Bunny::ServerDownError,
+          Bunny::ProtocolError,
+          # These should be caught by Bunny, but apparently aren't.
+          Errno::ECONNRESET
+        ].freeze
 
     end
 

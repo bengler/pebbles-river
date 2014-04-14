@@ -11,6 +11,15 @@ describe Pebbles::River::River do
     Pebbles::River::River.new('whatever')
   end
 
+  CONNECTION_EXCEPTIONS = [
+    Bunny::ConnectionError,
+    Bunny::ForcedChannelCloseError,
+    Bunny::ForcedConnectionCloseError,
+    Bunny::ServerDownError,
+    Bunny::ProtocolError,
+    Errno::ECONNRESET
+  ]
+
   after(:each) do
     subject.send(:bunny).queues.each do |name, queue|
       queue.purge
@@ -89,6 +98,49 @@ describe Pebbles::River::River do
       sleep(0.1)
       JSON.parse(queue.pop[:payload])['uid'].should eq('klass:path$1')
     end
+
+    CONNECTION_EXCEPTIONS.each do |exception_class|
+      context "on temporary failure with #{exception_class}" do
+        it "retries sending until success" do
+          exchange = double('exchange')
+
+          count = 0
+          exchange.stub(:publish) do
+            count += 1
+            if count < 3
+              raise exception_class.new
+            end
+          end
+
+          subject.stub(:exchange) { exchange }
+          subject.stub(:sleep) { }
+
+          expect(subject).to receive(:sleep).at_least(2).times
+
+          expect(exchange).to receive(:publish).at_least(2).times
+
+          subject.publish({event: 'explode', uid: 'thing:rspec$1'})
+        end
+      end
+    end
+
+    CONNECTION_EXCEPTIONS.each do |exception_class|
+      context "on permanent failure with #{exception_class}" do
+        it "re-raises #{exception_class} wrapped in SendFailure exception" do
+          exchange = double('exchange')
+          exchange.stub(:publish) do
+            raise exception_class.new
+          end
+
+          subject.stub(:exchange) { exchange }
+          subject.stub(:sleep) { }
+
+          expect(-> { subject.publish({event: 'explode', uid: 'thing:rspec$1'})}).to raise_error(
+            Pebbles::River::SendFailure)
+        end
+      end
+    end
+
   end
 
   it "subscribes" do
