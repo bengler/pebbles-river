@@ -95,25 +95,9 @@ module Pebbles
         end
 
         def process_next
-          queue.pop(auto_ack: false, ack: true) do |message|
-            if message[:payload] != :queue_empty
-              begin
-                payload = JSON.parse(message[:payload])
-                result = @handler.call(payload, message[:delivery_details])
-              rescue *CONNECTION_EXCEPTIONS
-                raise
-              rescue => exception
-                begin
-                  queue.nack(delivery_tag: message[:delivery_details][:delivery_tag])
-                rescue
-                  # Ignore
-                end
-                raise
-              else
-                if result != false
-                  queue.ack(delivery_tag: message[:delivery_details][:delivery_tag])
-                end
-              end
+          queue.pop(auto_ack: false, ack: true) do |raw_message|
+            if raw_message[:payload] != :queue_empty
+              process_message(raw_message)
               return true
             else
               return false
@@ -137,6 +121,36 @@ module Pebbles
             @on_exception.call(exception)
           rescue
             # Ignore
+          end
+        end
+
+        def process_message(raw_message)
+          begin
+            message = Message.new(raw_message, queue)
+          rescue => e
+            begin
+              queue.nack(delivery_tag: message[:delivery_details][:delivery_tag])
+            rescue
+              # Ignore
+            end
+            raise
+          else
+            begin
+              result = @handler.call(message)
+            rescue *CONNECTION_EXCEPTIONS
+              raise
+            rescue => exception
+              begin
+                message.nack
+              rescue
+                # Ignore
+              end
+              raise
+            else
+              if result != false
+                message.ack
+              end
+            end
           end
         end
 

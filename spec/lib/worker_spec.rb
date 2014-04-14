@@ -36,19 +36,27 @@ describe Worker do
     {'answer' => 42}
   end
 
+  let :raw_message do
+    {
+      header: 'someheader',
+      payload: JSON.dump(payload),
+      delivery_details: {delivery_tag: 'foo'}
+    }
+  end  
+
   let :queue do
     queue = double('Bunny::Queue')
     queue.stub(:close) { nil }
     queue.stub(:pop) { |&block|
-      block.call({
-        header: 'someheader',
-        payload: JSON.dump(payload),
-        delivery_details: {delivery_tag: 'foo'}
-      })
+      block.call(raw_message)
     }
     queue.stub(:ack) { }
     queue.stub(:nack) { }
     queue
+  end
+
+  let :message do
+    Message.new(raw_message, queue)
   end
 
   let :river do
@@ -88,7 +96,7 @@ describe Worker do
       expect(queue).to receive(:ack).at_least(1).times
       expect(queue).to_not receive(:nack)
 
-      expect(null_handler).to receive(:call).with(payload, {delivery_tag: 'foo'})
+      expect(null_handler).to receive(:call).with(message)
 
       expect(river).to receive(:connected?).with(no_args).at_least(1).times
       expect(river).to_not receive(:connect)
@@ -156,7 +164,7 @@ describe Worker do
           handler.stub(:call).and_return {
             raise exception_class.new("Dangit")
           }
-          expect(handler).to receive(:call).with(payload, {delivery_tag: 'foo'})
+          expect(handler).to receive(:call).with(message)
 
           expect(river).to receive(:connected?).with(no_args).at_least(1).times
           expect(river).to_not receive(:connect)
@@ -179,7 +187,7 @@ describe Worker do
           raise connection_exception
         }
         erroring_handler.stub(:on_connection_error).and_return(nil)
-        expect(erroring_handler).to receive(:call).with(payload, {delivery_tag: 'foo'})
+        expect(erroring_handler).to receive(:call).with(message)
 
         expect(river).to receive(:connected?).with(no_args).at_least(1).times
         expect(river).to_not receive(:connect)
