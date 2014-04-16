@@ -114,6 +114,10 @@ describe Pebbles::River::River do
 
           subject.stub(:exchange) { exchange }
           subject.stub(:sleep) { }
+          Timeout.stub(:timeout) { |&block|
+            block.call
+          }
+          expect(Timeout).to receive(:timeout).at_least(1).times
 
           expect(subject).to receive(:sleep).at_least(2).times
 
@@ -126,17 +130,33 @@ describe Pebbles::River::River do
 
     CONNECTION_EXCEPTIONS.each do |exception_class|
       context "on permanent failure with #{exception_class}" do
-        it "re-raises #{exception_class} wrapped in SendFailure exception" do
+        it "retries with exponential backoff until timeout and gives up with SendFailure" do
           exchange = double('exchange')
           exchange.stub(:publish) do
             raise exception_class.new
           end
-
           subject.stub(:exchange) { exchange }
-          subject.stub(:sleep) { }
 
-          expect(-> { subject.publish({event: 'explode', uid: 'thing:rspec$1'})}).to raise_error(
-            Pebbles::River::SendFailure)
+          count, sleeps = 0, []
+          subject.stub(:sleep) { |t|
+            count += 1
+            if count >= 10
+              raise Timeout::Error
+            end
+            sleeps.push(t)
+          }
+
+          Timeout.stub(:timeout) { |&block|
+            block.call
+          }
+          expect(Timeout).to receive(:timeout).at_least(1).times
+
+          expect(-> { subject.publish({event: 'explode', uid: 'thing:rspec$1'})}).to raise_error do |e|
+            e.should be Pebbles::River::SendFailure
+            e.exception.should be exception_class
+          end
+
+          expect(sleeps[0, 9]).to eq [1, 2, 4, 8, 10, 10, 10, 10, 10]
         end
       end
     end

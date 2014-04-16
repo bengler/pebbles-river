@@ -1,17 +1,6 @@
 module Pebbles
   module River
 
-    class SendFailure < StandardError
-
-      attr_reader :connection_exception
-
-      def initialize(message, connection_exception = nil)
-        super(message)
-        @connection_exception = connection_exception
-      end
-
-    end
-
     class River
 
       attr_reader :environment
@@ -20,6 +9,7 @@ module Pebbles
         options = {environment: options} if options.is_a?(String)  # Backwards compatibility
 
         @environment = (options[:environment] || ENV['RACK_ENV'] || 'development').dup.freeze
+        @last_connect_attempt = nil
       end
 
       def connected?
@@ -28,18 +18,26 @@ module Pebbles
 
       def connect
         unless connected?
-          bunny.start
-          bunny.qos
+          handle_connection_error do
+            bunny.start
+            bunny.qos
+          end
         end
       end
 
       def disconnect
-        bunny.stop if connected?
+        if connected?
+          begin
+            bunny.stop
+          rescue *CONNECTION_EXCEPTIONS
+            # Ignore
+          end
+        end
       end
 
       def publish(options = {})
         connect
-        handle_connection_error do
+        handle_connection_error(SendFailure) do
           exchange.publish(options.to_json,
             persistent: options.fetch(:persistent, true),
             key: Routing.routing_key_for(options.slice(:event, :uid)))
@@ -79,20 +77,31 @@ module Pebbles
           @exchange ||= bunny.exchange(exchange_name, EXCHANGE_OPTIONS.dup)
         end
 
-        def handle_connection_error(&block)
-          retry_until = nil
-          begin
-            yield
-          rescue *CONNECTION_EXCEPTIONS => exception
-            retry_until ||= Time.now + 4
-            if Time.now < retry_until
-              sleep(0.5)
+        def handle_connection_error(exception_klass = ConnectFailure, &block)
+          last_exception = nil
+          Timeout.timeout(MAX_RETRY_TIMEOUT) do
+            retry_until, retry_count = nil, 0
+            begin
+              yield
+            rescue *CONNECTION_EXCEPTIONS => exception
+              last_exception = exception
+              retry_count += 1
+              backoff(retry_count)
               retry
-            else
-              raise SendFailure.new(exception.message, exception)
             end
           end
+        rescue Timeout::Error => timeout
+          last_exception ||= timeout
+          raise exception_klass.new(last_exception.message, last_exception)
         end
+
+        def backoff(iteration)
+          sleep([(1.0 / 2.0 * (2.0 ** [30, iteration].min - 1.0)).ceil, MAX_BACKOFF_SECONDS].min)
+        end
+
+        MAX_RETRY_TIMEOUT = 10
+
+        MAX_BACKOFF_SECONDS = MAX_RETRY_TIMEOUT
 
         QUEUE_OPTIONS = {durable: true}.freeze
 
