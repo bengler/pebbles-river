@@ -16,6 +16,7 @@ module Pebbles
 
       attr_reader :payload
       attr_reader :queue
+      attr_reader :raw_message
 
       def self.deserialize_payload(payload)
         if payload
@@ -40,7 +41,11 @@ module Pebbles
       end
 
       def delivery_tag
-        @raw_message[:delivery_details][:delivery_tag]
+        delivery_details[:delivery_tag]
+      end
+
+      def delivery_details
+        @raw_message[:delivery_details] || {}
       end
 
       def ack
