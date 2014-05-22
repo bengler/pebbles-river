@@ -26,13 +26,18 @@ module Pebbles
       end
 
       def disconnect
-        if connected?
+        bunny = @bunny
+        if bunny and bunny.connected?
           begin
             bunny.stop
           rescue *CONNECTION_EXCEPTIONS
             # Ignore
           end
         end
+
+        # This will force fresh connection the next time we need it, otherwise
+        # Bunny won't create queues that no longer might exist
+        @bunny = nil
       end
 
       def publish(options = {})
