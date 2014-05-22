@@ -49,6 +49,7 @@ module Pebbles
         @handler = handler
         @river = River.new
         @next_event_time = Time.now
+        @rate_limiter = RateLimiter.new(1.0, 10)
       end
 
       # Runs the handler once.
@@ -114,14 +115,12 @@ module Pebbles
 
         def process_next
           with_exceptions do
-            with_connection_error_handling do
-              queue.pop(auto_ack: false, ack: true) do |raw_message|
-                if raw_message[:payload] != :queue_empty
-                  process_message(raw_message)
-                  return true
-                else
-                  return false
-                end
+            queue.pop(auto_ack: false, ack: true) do |raw_message|
+              if raw_message[:payload] != :queue_empty
+                process_message(raw_message)
+                return true
+              else
+                return false
               end
             end
           end
@@ -160,27 +159,27 @@ module Pebbles
           end
         end
 
-        def with_connection_error_handling(&block)
-          yield
-        rescue *CONNECTION_EXCEPTIONS => exception
-          if @queue
-            ignore_exceptions do
-              @queue.close
-            end
-            @queue = nil
-          end
-
-          @river.disconnect
-
-          ignore_exceptions do
-            @on_connection_error.call(exception)
-          end
-        end
-
         def with_exceptions(&block)
           begin
             yield
+          rescue *CONNECTION_EXCEPTIONS => exception
+            @rate_limiter.increment
+
+            if @queue
+              ignore_exceptions do
+                @queue.close
+              end
+              @queue = nil
+            end
+
+            @river.disconnect
+
+            ignore_exceptions do
+              @on_connection_error.call(exception)
+            end
           rescue => exception
+            @rate_limiter.increment
+
             ignore_exceptions do
               @on_exception.call(exception)
             end
