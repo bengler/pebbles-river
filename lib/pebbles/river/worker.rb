@@ -132,7 +132,7 @@ module Pebbles
             message = Message.new(raw_message, queue)
           rescue => exception
             ignore_exceptions do
-              queue.nack(delivery_tag: message[:delivery_details][:delivery_tag])
+              queue.nack(delivery_tag: raw_message[:delivery_details][:delivery_tag])
             end
             raise exception
           else
