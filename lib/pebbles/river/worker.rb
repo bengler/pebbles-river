@@ -148,8 +148,13 @@ module Pebbles
               end
               raise exception
             else
-              if result != false and @managed_acking
-                message.ack
+              if @managed_acking
+                case result
+                  when false
+                    message.nack
+                  else
+                    message.ack
+                end
               end
             end
           end
