@@ -18,6 +18,12 @@ describe Worker do
     handler
   end
 
+  let :false_handler do
+    handler = double('null_handler')
+    handler.stub(:call) { false }
+    handler
+  end
+
   let :io_error do
     IOError.new("This is not the exception you are looking for")
   end
@@ -142,6 +148,19 @@ describe Worker do
         expect(river).to_not receive(:connect)
 
         subject.new(null_handler, queue: {name: 'foo'}).run_once
+      end
+    end
+
+    context 'when handler returns false' do
+      it 'nacks the message' do
+        expect(queue).to receive(:nack).at_least(1).times
+        expect(queue).to_not receive(:ack)
+        expect(queue).to_not receive(:close)
+
+        expect(river).to receive(:connected?).with(no_args).at_least(1).times
+        expect(river).to_not receive(:connect)
+
+        subject.new(false_handler, queue: {name: 'foo'}).run_once
       end
     end
 
