@@ -20,7 +20,7 @@ module Pebbles
       # * `on_exception`: If provided, called with `exception` as an argument
       #   when a message could not be handled due to an exception. (Connection
       #   errors are not reported, however.)
-      # * `logger`: Optional logger.
+      # * `logger`: Optional logger. Defaults to stderr. Pass nil to disable.
       # * `managed_acking`: If true, ack/nack handling is automatic; every message
       #   is automatically acked unless the handler returns false or the handler
       #   raises an exception, in which case it's nacked. If false, the handler
@@ -49,7 +49,7 @@ module Pebbles
         @river = River.new
         @next_event_time = Time.now
         @rate_limiter = RateLimiter.new(1.0, 10)
-        @logger = options[:logger]
+        @logger = options.fetch(:logger, Logger.new($stderr))
       end
 
       # Runs the handler once.
