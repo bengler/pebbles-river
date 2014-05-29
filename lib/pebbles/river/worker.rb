@@ -17,10 +17,10 @@ module Pebbles
       # Initializes worker with a handler. Options:
       #
       # * `queue`: Same queue options as `River#queue`.
-      # * `on_exception`: If provided, called when a message could not be handled
-      #   due to an exception.
-      # * `on_connection_error`: If provided, call on recovered connection errors.
-      #   Uses `on_exception` if not implemented.
+      # * `on_exception`: If provided, called with `exception` as an argument
+      #   when a message could not be handled due to an exception. (Connection
+      #   errors are not reported, however.)
+      # * `logger`: Optional logger.
       # * `managed_acking`: If true, ack/nack handling is automatic; every message
       #   is automatically acked unless the handler returns false or the handler
       #   raises an exception, in which case it's nacked. If false, the handler
@@ -34,8 +34,8 @@ module Pebbles
       def initialize(handler, options = {})
         options.assert_valid_keys(
           :queue,
+          :logger,
           :on_exception,
-          :on_connection_error,
           :managed_acking)
 
         unless handler.respond_to?(:call)
@@ -44,12 +44,12 @@ module Pebbles
 
         @queue_options = (options[:queue] || {}).freeze
         @managed_acking = !!options.fetch(:managed_acking, true)
-        @on_exception = options[:on_exception] || ->(e) { }
-        @on_connection_error = options[:on_connection_error] || @on_exception
+        @on_exception = options[:on_exception] || ->(*args) { }
         @handler = handler
         @river = River.new
         @next_event_time = Time.now
         @rate_limiter = RateLimiter.new(1.0, 10)
+        @logger = options[:logger]
       end
 
       # Runs the handler once.
@@ -163,6 +163,10 @@ module Pebbles
           begin
             yield
           rescue *CONNECTION_EXCEPTIONS => exception
+            if @logger
+              @logger.error("Connection error (#{exception.class}): #{exception}")
+            end
+
             @rate_limiter.increment
 
             if @queue
@@ -173,11 +177,11 @@ module Pebbles
             end
 
             @river.disconnect
-
-            ignore_exceptions do
-              @on_connection_error.call(exception)
-            end
           rescue => exception
+            if @logger
+              @logger.error("Exception (#{exception.class}) while handling message: #{exception}")
+            end
+
             @rate_limiter.increment
 
             ignore_exceptions do
@@ -188,8 +192,10 @@ module Pebbles
 
         def ignore_exceptions(&block)
           yield
-        rescue
-          # Ignore
+        rescue => e
+          if @logger
+            @logger.warn("Ignoring exception (#{e.class}): #{e}")
+          end
         end
 
         CONNECTION_EXCEPTIONS = [

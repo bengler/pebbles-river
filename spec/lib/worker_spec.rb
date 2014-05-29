@@ -187,54 +187,91 @@ describe Worker do
         Bunny::ProtocolError,
         Errno::ECONNRESET
       ].each do |exception_class|
-        it "performs connection reset on #{exception_class}" do
-          expect(queue).to receive(:close).at_least(1).times
+        context "connection exception #{exception_class}" do
+          let :exception do
+            exception_class.new("Dangit")
+          end
 
-          handler = double('handler')
-          handler.stub(:call).and_return {
-            raise exception_class.new("Dangit")
-          }
-          expect(handler).to receive(:call).with(message)
+          let :handler do
+            handler = double('handler')
+            handler.stub(:call).and_return {
+              raise exception
+            }
+            handler
+          end
 
-          expect(river).to receive(:connected?).with(no_args).at_least(1).times
-          expect(river).to_not receive(:connect)
-          expect(river).to receive(:queue).with({name: 'foo'})
-          expect(river).to receive(:disconnect).at_least(1).times
+          it "performs connection reset on #{exception_class}" do
+            expect(queue).to receive(:close).at_least(1).times
 
-          subject.new(handler, queue: {name: 'foo'}).run_once
+            expect(handler).to receive(:call).with(message)
+
+            expect(river).to receive(:connected?).with(no_args).at_least(1).times
+            expect(river).to_not receive(:connect)
+            expect(river).to receive(:queue).with({name: 'foo'})
+            expect(river).to receive(:disconnect).at_least(1).times
+
+            subject.new(handler, queue: {name: 'foo'}).run_once
+          end
+
+          it "does not call #on_exception on connection error" do
+            on_exception_callback = double('on_connection_error')
+            on_exception_callback.stub(:call) { }
+            expect(on_exception_callback).to_not receive(:call)
+
+            expect(queue).to receive(:close).at_least(1).times
+
+            expect(handler).to receive(:call).at_least(1).times
+
+            expect(river).to receive(:connected?).with(no_args).at_least(1).times
+            expect(river).to_not receive(:connect)
+            expect(river).to receive(:disconnect).at_least(1).times
+
+            subject.new(handler,
+              queue: {name: 'foo'},
+              on_exception: on_exception_callback).run_once
+          end
+
+          it "logs error to logger" do
+            expect(handler).to receive(:call).with(message)
+
+            logger = double('logger')
+            logger.stub(:error) { }
+            expect(logger).to receive(:error).
+              with(/#{Regexp.escape(exception.message)}/).at_least(1).times
+
+            river.stub(:disconnect)
+
+            subject.new(handler,
+              queue: {name: 'foo'},
+              logger: logger).run_once
+          end
         end
       end
 
-      it "calls #on_connection_error if it's implemented" do
-        connection_error_handler = double('on_connection_error')
-        connection_error_handler.stub(:call) { }
-        expect(connection_error_handler).to receive(:call).with(connection_exception)
+      context 'non-connection exception' do
+        it "calls #on_exception" do
+          expect(queue).to_not receive(:close)
+          expect(on_exception_callback).to receive(:call).with(io_error)
 
-        expect(queue).to receive(:close).at_least(1).times
+          subject.new(io_error_raising_handler,
+            queue: {name: 'foo'},
+            on_exception: on_exception_callback).run_once
+        end
 
-        erroring_handler = double('handler')
-        erroring_handler.stub(:call).and_return {
-          raise connection_exception
-        }
-        erroring_handler.stub(:on_connection_error).and_return(nil)
-        expect(erroring_handler).to receive(:call).with(message)
+        it "logs error to logger" do
+          on_exception_callback.stub(:call)
 
-        expect(river).to receive(:connected?).with(no_args).at_least(1).times
-        expect(river).to_not receive(:connect)
-        expect(river).to receive(:disconnect).at_least(1).times
+          river.stub(:disconnect)
 
-        subject.new(erroring_handler,
-          queue: {name: 'foo'},
-          on_connection_error: connection_error_handler).run_once
-      end
+          logger = double('logger')
+          logger.stub(:error) { }
+          expect(logger).to receive(:error).
+            with(/#{Regexp.escape(io_error.message)}/).at_least(1).times
 
-      it "calls #on_exception for non-connection errors" do
-        expect(queue).to_not receive(:close)
-        expect(on_exception_callback).to receive(:call).with(io_error)
-
-        subject.new(io_error_raising_handler,
-          queue: {name: 'foo'},
-          on_exception: on_exception_callback).run_once
+          subject.new(io_error_raising_handler,
+            queue: {name: 'foo'},
+            logger: logger).run_once
+        end
       end
 
     end
