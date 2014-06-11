@@ -53,7 +53,9 @@ module Pebbles
       end
 
       def nack
-        @queue.nack(delivery_tag: delivery_tag)
+        # TODO: This requires Bunny 0.9+. We therefore don't nack at all, but
+        #   let messages simply expire, since pre-0.9 doesn't have a way to nack.
+        #@channel.nack(delivery_tag, false)
       end
 
     end

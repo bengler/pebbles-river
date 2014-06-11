@@ -152,15 +152,27 @@ describe Worker do
     end
 
     context 'when handler returns false' do
-      it 'nacks the message' do
-        expect(queue).to receive(:nack).at_least(1).times
-        expect(queue).to_not receive(:ack)
-        expect(queue).to_not receive(:close)
+      if false  # Needs Bunny 0.9+
+        it 'nacks the message' do
+          expect(queue).to receive(:nack).at_least(1).times
+          expect(queue).to_not receive(:ack)
+          expect(queue).to_not receive(:close)
 
-        expect(river).to receive(:connected?).with(no_args).at_least(1).times
-        expect(river).to_not receive(:connect)
+          expect(river).to receive(:connected?).with(no_args).at_least(1).times
+          expect(river).to_not receive(:connect)
 
-        subject.new(false_handler, queue: {name: 'foo'}).run_once
+          subject.new(false_handler, queue: {name: 'foo'}).run_once
+        end
+      else
+        it 'leaves the message un-acked' do
+          expect(queue).to_not receive(:ack)
+          expect(queue).to_not receive(:close)
+
+          expect(river).to receive(:connected?).with(no_args).at_least(1).times
+          expect(river).to_not receive(:connect)
+
+          subject.new(false_handler, queue: {name: 'foo'}).run_once
+        end
       end
     end
 
@@ -172,11 +184,20 @@ describe Worker do
         on_exception_callback
       end
 
-      it 'nacks the message' do
-        expect(queue).to receive(:nack).at_least(1).times
-        expect(queue).to_not receive(:close)
+      if false  # Needs Bunny 0.9+
+        it 'nacks the message' do
+          expect(queue).to receive(:nack).at_least(1).times
+          expect(queue).to_not receive(:close)
 
-        subject.new(io_error_raising_handler, queue: {name: 'foo'}).run_once
+          subject.new(io_error_raising_handler, queue: {name: 'foo'}).run_once
+        end
+      else
+        it 'leaves the message un-acked' do
+          expect(queue).to_not receive(:ack)
+          expect(queue).to_not receive(:close)
+
+          subject.new(io_error_raising_handler, queue: {name: 'foo'}).run_once
+        end
       end
 
       [
