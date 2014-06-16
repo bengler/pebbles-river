@@ -24,6 +24,7 @@ Gem::Specification.new do |spec|
   spec.add_runtime_dependency 'bunny', '~> 0.8.0'
   spec.add_runtime_dependency 'activesupport', '>= 3.0'
   spec.add_runtime_dependency 'servolux', '~> 0.10'
+  spec.add_runtime_dependency 'mercenary', '~> 0.3.3'
 
   spec.add_development_dependency 'rspec'
   spec.add_development_dependency "bundler", "~> 1.5"
