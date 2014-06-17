@@ -3,11 +3,11 @@ module Pebbles
 
     class InvalidPayloadError < StandardError
 
-      attr_reader :payload
+      attr_reader :content
 
-      def initalize(message, payload)
+      def initialize(message, content)
         super(message)
-        @payload = payload
+        @content = content
       end
 
     end
@@ -16,22 +16,22 @@ module Pebbles
 
       attr_reader :payload
       attr_reader :queue
-      attr_reader :raw_message
+      attr_reader :delivery_info
 
-      def self.deserialize_payload(payload)
-        if payload
+      def self.deserialize_payload(content)
+        if content
           begin
-            return JSON.parse(payload)
+            return JSON.parse(content)
           rescue => e
-            raise InvalidPayloadError.new(e.message, payload)
+            raise InvalidPayloadError.new(e.message, content)
           end
         end
       end
 
-      def initialize(raw_message, queue = nil)
+      def initialize(content, delivery_info, queue = nil)
         @queue = queue
-        @raw_message = raw_message
-        @payload = self.class.deserialize_payload(raw_message[:payload])
+        @delivery_info = delivery_info
+        @payload = self.class.deserialize_payload(content)
       end
 
       def ==(other)
@@ -41,21 +41,16 @@ module Pebbles
       end
 
       def delivery_tag
-        delivery_details[:delivery_tag]
-      end
-
-      def delivery_details
-        @raw_message[:delivery_details] || {}
+        @delivery_info.delivery_tag if @delivery_info
       end
 
       def ack
-        @queue.ack(delivery_tag: delivery_tag)
+        p @queue
+        @queue.channel.ack(delivery_tag)
       end
 
       def nack
-        # TODO: This requires Bunny 0.9+. We therefore don't nack at all, but
-        #   let messages simply expire, since pre-0.9 doesn't have a way to nack.
-        #@channel.nack(delivery_tag, false)
+        @queue.channel.nack(delivery_tag, false, true)
       end
 
     end

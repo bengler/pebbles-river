@@ -21,7 +21,7 @@ Gem::Specification.new do |spec|
   spec.require_paths = ["lib"]
 
   spec.add_runtime_dependency 'pebblebed', '>= 0.1.3'
-  spec.add_runtime_dependency 'bunny', '~> 0.8.0'
+  spec.add_runtime_dependency 'bunny', '~> 1.2.2'
   spec.add_runtime_dependency 'activesupport', '>= 3.0'
   spec.add_runtime_dependency 'servolux', '~> 0.10'
   spec.add_runtime_dependency 'mercenary', '~> 0.3.3'

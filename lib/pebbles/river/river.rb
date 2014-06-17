@@ -4,6 +4,9 @@ module Pebbles
     class River
 
       attr_reader :environment
+      attr_reader :exchange
+      attr_reader :session
+      attr_reader :channel
 
       def initialize(options = {})
         options = {environment: options} if options.is_a?(String)  # Backwards compatibility
@@ -13,36 +16,41 @@ module Pebbles
       end
 
       def connected?
-        bunny.connected?
+        @session && @session.connected?
       end
 
       def connect
-        unless connected?
-          handle_connection_error do
-            bunny.start
-            bunny.qos
+        unless @session
+          handle_session_error do
+            @session = Bunny::Session.new
+            @session.start
+
+            @channel = @session.create_channel
+
+            @exchange = @channel.exchange(exchange_name, EXCHANGE_OPTIONS.dup)
           end
         end
       end
 
       def disconnect
-        bunny = @bunny
-        if bunny and bunny.connected?
+        @exchange = nil
+        if @channel
+          @channel.close
+          @channel = nil
+        end
+        if @session
           begin
-            bunny.stop
+            @session.stop
           rescue *CONNECTION_EXCEPTIONS
             # Ignore
           end
+          @session = nil
         end
-
-        # This will force fresh connection the next time we need it, otherwise
-        # Bunny won't create queues that no longer might exist
-        @bunny = nil
       end
 
       def publish(options = {})
         connect
-        handle_connection_error(SendFailure) do
+        handle_session_error(SendFailure) do
           exchange.publish(options.to_json,
             persistent: options.fetch(:persistent, true),
             key: Routing.routing_key_for(options.slice(:event, :uid)))
@@ -53,22 +61,17 @@ module Pebbles
         raise ArgumentError.new 'Queue must be named' unless options[:name]
 
         connect
-
-        queue = bunny.queue(options[:name], QUEUE_OPTIONS.dup)
+        queue = @channel.queue(options[:name], QUEUE_OPTIONS.dup)
         Subscription.new(options).queries.each do |key|
           queue.bind(exchange.name, key: key)
         end
         queue
       end
 
-      def exchange_name
-        return @exchange_name ||= format_exchange_name
-      end
-
       private
 
-        def bunny
-          @bunny ||= Bunny.new
+        def exchange_name
+          return @exchange_name ||= format_exchange_name
         end
 
         def format_exchange_name
@@ -77,12 +80,7 @@ module Pebbles
           name
         end
 
-        def exchange
-          connect
-          @exchange ||= bunny.exchange(exchange_name, EXCHANGE_OPTIONS.dup)
-        end
-
-        def handle_connection_error(exception_klass = ConnectFailure, &block)
+        def handle_session_error(exception_klass = ConnectFailure, &block)
           last_exception = nil
           Timeout.timeout(MAX_RETRY_TIMEOUT) do
             retry_until, retry_count = nil, 0
