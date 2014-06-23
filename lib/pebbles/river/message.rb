@@ -45,7 +45,6 @@ module Pebbles
       end
 
       def ack
-        p @queue
         @queue.channel.ack(delivery_tag)
       end
 
