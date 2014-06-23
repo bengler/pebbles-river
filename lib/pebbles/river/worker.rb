@@ -115,9 +115,9 @@ module Pebbles
 
         def process_next
           with_exceptions do
-            queue.pop(auto_ack: false, ack: true) do |raw_message|
-              if raw_message[:payload] != :queue_empty
-                process_message(raw_message)
+            queue.pop(ack: true) do |delivery_info, properties, content|
+              if delivery_info
+                process_message(delivery_info, properties, content)
                 return true
               else
                 return false
@@ -126,12 +126,12 @@ module Pebbles
           end
         end
 
-        def process_message(raw_message)
+        def process_message(delivery_info, properties, content)
           begin
-            message = Message.new(raw_message, queue)
+            message = Message.new(content, delivery_info, queue)
           rescue => exception
             ignore_exceptions do
-              queue.nack(delivery_tag: raw_message[:delivery_details][:delivery_tag])
+              queue.channel.nack(delivery_info, false, true)
             end
             raise exception
           else

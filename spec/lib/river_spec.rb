@@ -21,11 +21,13 @@ describe Pebbles::River::River do
   ]
 
   after(:each) do
-    subject.send(:bunny).queues.each do |name, queue|
-      queue.purge
-      # If you don't delete the queue, the subscription will not
-      # change, even if you give it a new one.
-      queue.delete
+    if (channel = subject.channel)
+      channel.queues.each do |name, queue|
+        queue.purge
+        # If you don't delete the queue, the subscription will not
+        # change, even if you give it a new one.
+        queue.delete
+      end
     end
     subject.disconnect
   end
@@ -33,14 +35,16 @@ describe Pebbles::River::River do
   it { subject.should_not be_connected }
 
   it "gets the name right" do
-    subject.exchange_name.should eq('pebblebed.river.whatever')
+    subject.connect
+    subject.exchange.name.should eq('pebblebed.river.whatever')
   end
 
   context "in production" do
     subject { Pebbles::River::River.new('production') }
 
     it "doesn't append the thing" do
-      subject.exchange_name.should eq('pebblebed.river')
+      subject.connect
+      subject.exchange.name.should eq('pebblebed.river')
     end
   end
 
@@ -59,12 +63,6 @@ describe Pebbles::River::River do
   it "connects if you try to publish something" do
     subject.should_not be_connected
     subject.publish(:event => :test, :uid => 'klass:path$123', :attributes => {:a => 'b'})
-    subject.should be_connected
-  end
-
-  it "connects if you try to talk to the exchange" do
-    subject.should_not be_connected
-    subject.send(:exchange)
     subject.should be_connected
   end
 
@@ -96,7 +94,8 @@ describe Pebbles::River::River do
       queue = subject.queue(:name => 'eatseverything')
       subject.publish(:event => 'smile', :source => 'rspec', :uid => 'klass:path$1', :attributes => {:a => 'b'})
       sleep(0.1)
-      JSON.parse(queue.pop[:payload])['uid'].should eq('klass:path$1')
+      _, _, payload = queue.pop
+      JSON.parse(payload)['uid'].should eq('klass:path$1')
     end
 
     CONNECTION_EXCEPTIONS.each do |exception_class|
@@ -108,7 +107,7 @@ describe Pebbles::River::River do
           exchange.stub(:publish) do
             count += 1
             if count < 3
-              raise exception_class.new
+              raise create_exception(exception_class)
             end
           end
 
@@ -133,7 +132,7 @@ describe Pebbles::River::River do
         it "retries with exponential backoff until timeout and gives up with SendFailure" do
           exchange = double('exchange')
           exchange.stub(:publish) do
-            raise exception_class.new
+            raise create_exception(exception_class)
           end
           subject.stub(:exchange) { exchange }
 

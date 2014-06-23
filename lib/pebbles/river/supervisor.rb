@@ -1,6 +1,8 @@
 module Pebbles
   module River
 
+    class ConfigurationError < StandardError; end
+
     class Supervisor < Servolux::Server
 
       def initialize(name, options = {})
@@ -9,33 +11,62 @@ module Pebbles
         options.assert_valid_keys(:logger, :pid_file, :worker_count, :worker)
 
         @worker_count = options[:worker_count] || 1
-        @worker = options[:worker]
 
-        worker = @worker
-        @pool = Servolux::Prefork.new(min_workers: @worker_count) do
-          $0 = "#{name}: worker"
-          trap('TERM') { worker.stop }
-          worker.run
-        end
+        @queue_modules = []
       end
 
+      def start_workers
+        if @queue_modules.empty?
+          raise ConfigurationError.new("No listeners configured")
+        end
+
+        @prefork = MultiPrefork.new(
+          min_workers: @worker_count,
+          modules: @queue_modules)
+      end
+
+      def add_listener(listener, queue_spec)
+        worker = Pebbles::River::Worker.new(listener,
+          queue: queue_spec,
+          on_exception: ->(e) {
+            if logger.respond_to?(:exception)
+              logger.exception(e)
+            else
+              logger.error("Exception #{e.class}: #{e} #{e.backtrace.join("\n")}")
+            end
+          })
+
+        process_name = "#{@name}: queue worker: #{queue_spec[:name]}"
+        logger = @logger
+
+        @queue_modules.push(-> {
+          $0 = process_name
+          trap('TERM') { worker.stop }
+          worker.run
+        })
+      end
+
+      # From Servolux::Server
       def before_starting
         $0 = "#{name}: master"
 
         logger.info "Starting workers"
-        @pool.start(1)
+        @prefork.start(1)
       end
 
+      # From Servolux::Server
       def after_stopping
         shutdown_workers
       end
 
+      # From Servolux::Server
       def usr2
         shutdown_workers
       end
 
+      # From Servolux::Server
       def run
-        @pool.ensure_worker_pool_size
+        @prefork.ensure_worker_pool_size
       rescue => e
         if logger.respond_to? :exception
           logger.exception(e)
@@ -49,9 +80,9 @@ module Pebbles
 
         def shutdown_workers
           logger.info "Shutting down all workers"
-          @pool.stop
+          @prefork.stop
           loop do
-            break if @pool.live_worker_count <= 0
+            break if @prefork.live_worker_count <= 0
             logger.info "Waiting for workers to quit"
             sleep 0.25
           end

@@ -42,27 +42,37 @@ describe Worker do
     {'answer' => 42}
   end
 
+  let :delivery_info do
+    Class.new {
+      def delivery_tag
+        'doink'
+      end
+    }.new
+  end
+
   let :raw_message do
-    {
-      header: 'someheader',
-      payload: JSON.dump(payload),
-      delivery_details: {delivery_tag: 'foo'}
-    }
-  end  
+    [delivery_info, {}, JSON.dump(payload)]
+  end
+
+  let :channel do
+    channel = double('Bunny::Channel')
+    channel.stub(:ack) { }
+    channel.stub(:nack) { }
+    channel
+  end
 
   let :queue do
     queue = double('Bunny::Queue')
     queue.stub(:close) { nil }
     queue.stub(:pop) { |&block|
-      block.call(raw_message)
+      block.call(*raw_message)
     }
-    queue.stub(:ack) { }
-    queue.stub(:nack) { }
+    queue.stub(:channel) { channel }
     queue
   end
 
   let :message do
-    Message.new(raw_message, queue)
+    Message.new(raw_message[2], nil, queue)
   end
 
   let :river do
@@ -99,8 +109,9 @@ describe Worker do
 
     it 'creates a queue and runs worker with it' do
       expect(queue).to receive(:pop).at_least(1).times
-      expect(queue).to receive(:ack).at_least(1).times
-      expect(queue).to_not receive(:nack)
+
+      expect(channel).to receive(:ack).at_least(1).times
+      expect(channel).to_not receive(:nack)
 
       expect(null_handler).to receive(:call).with(message)
 
@@ -114,7 +125,7 @@ describe Worker do
     context 'when queue is empty' do
       it 'does nothing' do
         queue.stub(:pop) { |&block|
-          block.call({payload: :queue_empty, delivery_details: {}})
+          block.call(nil, nil, nil)
         }
 
         expect(queue).to receive(:pop).at_least(1).times
@@ -128,7 +139,7 @@ describe Worker do
 
       it 'calls #on_idle if implemented' do
         queue.stub(:pop) { |&block|
-          block.call({payload: :queue_empty, delivery_details: {}})
+          block.call(nil, nil, nil)
         }
 
         null_handler.stub(:on_idle) { }
@@ -140,9 +151,10 @@ describe Worker do
 
     context 'when handler is successful' do
       it 'acks the message' do
-        expect(queue).to receive(:ack).at_least(1).times
-        expect(queue).to_not receive(:nack)
         expect(queue).to_not receive(:close)
+
+        expect(channel).to receive(:ack).at_least(1).times
+        expect(channel).to_not receive(:nack)
 
         expect(river).to receive(:connected?).with(no_args).at_least(1).times
         expect(river).to_not receive(:connect)
@@ -154,9 +166,10 @@ describe Worker do
     context 'when handler returns false' do
       if false  # Needs Bunny 0.9+
         it 'nacks the message' do
-          expect(queue).to receive(:nack).at_least(1).times
-          expect(queue).to_not receive(:ack)
           expect(queue).to_not receive(:close)
+
+          expect(channel).to receive(:nack).at_least(1).times
+          expect(channel).to_not receive(:ack)
 
           expect(river).to receive(:connected?).with(no_args).at_least(1).times
           expect(river).to_not receive(:connect)
@@ -210,7 +223,7 @@ describe Worker do
       ].each do |exception_class|
         context "connection exception #{exception_class}" do
           let :exception do
-            exception_class.new("Dangit")
+            create_exception(exception_class)
           end
 
           let :handler do
@@ -257,8 +270,10 @@ describe Worker do
 
             logger = double('logger')
             logger.stub(:error) { }
+
+            # TODO: Test exception contents here
             expect(logger).to receive(:error).
-              with(/#{Regexp.escape(exception.message)}/).at_least(1).times
+              with(/.*/).at_least(1).times
 
             river.stub(:disconnect)
 
@@ -319,7 +334,7 @@ describe Worker do
     context 'when queue is empty' do
       it 'calls #sleep to delay polling a bit' do
         queue.stub(:pop) { |&block|
-          block.call({payload: :queue_empty, delivery_details: {}})
+          block.call(nil, nil, nil)
         }
 
         count = 0
