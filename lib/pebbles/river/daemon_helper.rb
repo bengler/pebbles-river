@@ -72,6 +72,14 @@ module Pebbles
         else
           abort "Run with -h for help."
         end
+      rescue => e
+        if @logger.respond_to?(:exception)
+          @logger.exception(e)
+        else
+          @logger.error "Error: #{e.class}: #{e}"
+          @logger.error e.backtrace.map { |s| "\t#{s}\n" }.join
+        end
+        exit(1)
       end
 
       private
