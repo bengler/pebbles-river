@@ -11,16 +11,18 @@ module Pebbles
     #
     # * `name`: Name of the process. Optional, defaults to `$0`.
     #
-    # * `configure_start_command(command)`. Implement to add more options to
-    #   the start command, eg. configuration options. Optional.
+    # * `configure_start_command(command)`. Implement to add more
+    #   options to the start command, eg. configuration options. Optional.
     #
-    # * `on_start(options)`. Implement to inject code before the program
+    # * `on_start(options, helper)`. Implement to inject code before the program
     #   starts. Options are the start options, a hash. Optional.
     #
     # * `configure_supervisor(supervisor)`. This must call `add_listener` on the
     #   supervisor to add workers. Required.
     #
     class DaemonHelper
+
+      attr_accessor :logger
 
       def initialize(adapter, options = {})
         @adapter = adapter
@@ -76,7 +78,7 @@ module Pebbles
 
         def start(options)
           if @adapter.respond_to?(:on_start)
-            @adapter.on_start(options)
+            @adapter.on_start(options, self)
           end
 
           daemon = new_daemon(options)
