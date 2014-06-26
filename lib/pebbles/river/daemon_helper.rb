@@ -24,6 +24,10 @@ module Pebbles
 
       attr_accessor :logger
 
+      def self.run(adapter, options = {})
+        new(adapter, options).run
+      end
+
       def initialize(adapter, options = {})
         @adapter = adapter
 
