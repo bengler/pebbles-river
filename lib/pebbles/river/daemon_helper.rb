@@ -47,7 +47,9 @@ module Pebbles
             c.option :pidfile, '-p', '--pidfile PIDFILE', 'Path to pid file.'
             c.option :workers, Integer, '-w', '--workers N', 'Set number of workers per queue (defaults to 1).'
             c.action do |_, options|
-              start(options)
+              handle_exceptions do
+                start(options)
+              end
             end
             if @adapter.respond_to?(:configure_start_command)
               @adapter.configure_start_command(c)
@@ -58,7 +60,9 @@ module Pebbles
             c.description 'Stops daemon'
             c.option :pidfile, '-p', '--pidfile PIDFILE', 'Path to pid file.'
             c.action do |_, options|
-              stop(options)
+              handle_exceptions do
+                stop(options)
+              end
             end
           end
           p.command(:status) do |c|
@@ -66,7 +70,9 @@ module Pebbles
             c.description 'Prints daemon status'
             c.option :pidfile, '-p', '--pidfile PIDFILE', 'Path to pid file.'
             c.action do |_, options|
-              status(options)
+              handle_exceptions do
+                status(options)
+              end
             end
           end
         end
@@ -76,14 +82,6 @@ module Pebbles
         else
           abort "Run with -h for help."
         end
-      rescue => e
-        if @logger.respond_to?(:exception)
-          @logger.exception(e)
-        else
-          @logger.error "Error: #{e.class}: #{e}"
-          @logger.error e.backtrace.map { |s| "\t#{s}\n" }.join
-        end
-        exit(1)
       end
 
       private
@@ -158,6 +156,17 @@ module Pebbles
           Servolux::Daemon.new(
             server: supervisor,
             nochdir: true)
+        end
+
+        def handle_exceptions(&block)
+          yield
+        rescue => e
+          if @logger.respond_to?(:exception)
+            @logger.exception(e)
+          end
+          $stderr.puts "Error: #{e.class}: #{e}"
+          $stderr.puts e.backtrace.map { |s| "\t#{s}\n" }.join
+          exit(1)
         end
 
     end
