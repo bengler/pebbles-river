@@ -83,7 +83,7 @@ module Pebbles
       # Runs the handler. This will process the queue indefinitely.
       def run
         @enabled = true
-        while enabled? do
+        while @enabled do
           run_once
         end
       end
