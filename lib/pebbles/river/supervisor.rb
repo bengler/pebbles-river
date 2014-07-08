@@ -12,17 +12,22 @@ module Pebbles
 
         @worker_count = options[:worker_count] || 1
 
-        @queue_modules = []
+        @prefork_pools = []
+
+        @worker_modules = []
       end
 
       def start_workers
-        if @queue_modules.empty?
+        if @worker_modules.empty?
           raise ConfigurationError.new("No listeners configured")
         end
 
-        @prefork = MultiPrefork.new(
-          min_workers: @worker_count,
-          modules: @queue_modules)
+        @worker_modules.each do |m|
+          @prefork_pools.push(
+            Servolux::Prefork.new(
+              min_workers: @worker_count,
+              module: m))
+        end
       end
 
       def add_listener(listener, queue_spec)
@@ -39,10 +44,16 @@ module Pebbles
         process_name = "#{@name}: queue worker: #{queue_spec[:name]}"
         logger = @logger
 
-        @queue_modules.push(-> {
-          $0 = process_name
-          trap('TERM') { worker.stop }
-          worker.run
+        @worker_modules.push(Module.new {
+          define_method :execute do
+            $0 = process_name
+            trap('TERM') do
+              logger.info "Worker received TERM"
+              worker.stop
+              exit(0)
+            end
+            worker.run
+          end
         })
       end
 
@@ -51,7 +62,9 @@ module Pebbles
         $0 = "#{name}: master"
 
         logger.info "Starting workers"
-        @prefork.start(1)
+        @prefork_pools.each do |prefork|
+          prefork.start(1)
+        end
       end
 
       # From Servolux::Server
@@ -66,7 +79,9 @@ module Pebbles
 
       # From Servolux::Server
       def run
-        @prefork.ensure_worker_pool_size
+        @prefork_pools.each do |prefork|
+          prefork.ensure_worker_pool_size
+        end
       rescue => e
         if logger.respond_to? :exception
           logger.exception(e)
@@ -80,9 +95,9 @@ module Pebbles
 
         def shutdown_workers
           logger.info "Shutting down all workers"
-          @prefork.stop
+          @prefork_pools.each(&:stop)
           loop do
-            break if @prefork.live_worker_count <= 0
+            break if @prefork_pools.all? { |prefork| prefork.live_worker_count <= 0 }
             logger.info "Waiting for workers to quit"
             sleep 0.25
           end
