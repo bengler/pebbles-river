@@ -22,12 +22,14 @@ module Pebbles
       def connect
         unless @session
           handle_session_error do
-            @session = Bunny::Session.new
-            @session.start
+            session = Bunny::Session.new
+            session.start
 
-            @channel = @session.create_channel
+            channel = session.create_channel
 
-            @exchange = @channel.exchange(exchange_name, EXCHANGE_OPTIONS.dup)
+            exchange = channel.exchange(exchange_name, EXCHANGE_OPTIONS.dup)
+
+            @session, @channel, @exchange = session, channel, exchange
           end
         end
       end
