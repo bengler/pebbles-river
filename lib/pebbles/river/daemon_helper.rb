@@ -1,6 +1,16 @@
 require 'logger'
 require 'mercenary'
 
+# Monkeypatch Mercenary to fix a hash function. See
+#   https://github.com/jekyll/mercenary/pull/35
+Mercenary::Option.class_eval do
+  def hash
+    instance_variables.map do |var|
+      instance_variable_get(var).hash
+    end.reduce(:^)
+  end
+end
+
 module Pebbles
   module River
 
