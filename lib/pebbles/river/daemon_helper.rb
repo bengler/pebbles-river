@@ -118,11 +118,12 @@ module Pebbles
         def stop(options)
           daemon = get_daemon(options)
           unless daemon.alive?
-            abort "#{daemon.name} is not running."
+            puts "#{daemon.name} is not running."
+          else
+            print "Stopping #{daemon.name}"
+            daemon.shutdown
+            puts ", done."
           end
-          print "Stopping #{daemon.name}"
-          daemon.shutdown
-          puts ", done."
           exit
         end
 
