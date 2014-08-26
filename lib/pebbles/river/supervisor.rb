@@ -30,8 +30,8 @@ module Pebbles
         end
       end
 
-      def add_listener(listener, queue_spec)
-        worker = Pebbles::River::Worker.new(listener,
+      def add_listener(listener, queue_spec, worker_options = {})
+        worker = Pebbles::River::Worker.new(listener, {
           queue: queue_spec,
           on_exception: ->(e) {
             if logger.respond_to?(:exception)
@@ -39,7 +39,8 @@ module Pebbles
             else
               logger.error("Exception #{e.class}: #{e} #{e.backtrace.join("\n")}")
             end
-          })
+          }
+        }.merge(worker_options))
 
         process_name = "#{@name}: queue worker: #{queue_spec[:name]}"
         logger = @logger
