@@ -61,9 +61,15 @@ module Pebbles
 
       def queue(options = {})
         raise ArgumentError.new 'Queue must be named' unless options[:name]
+        options = options.dup
+
+        queue_opts = {durable: true}
+        if (ttl = options[:ttl])
+          queue_opts[:arguments] = {'x-message-ttl' => ttl}
+        end
 
         connect
-        queue = @channel.queue(options[:name], QUEUE_OPTIONS.dup)
+        queue = @channel.queue(options[:name], queue_opts)
         Subscription.new(options).queries.each do |key|
           queue.bind(exchange.name, key: key)
         end
@@ -107,8 +113,6 @@ module Pebbles
         MAX_RETRY_TIMEOUT = 10
 
         MAX_BACKOFF_SECONDS = MAX_RETRY_TIMEOUT
-
-        QUEUE_OPTIONS = {durable: true}.freeze
 
         EXCHANGE_OPTIONS = {type: :topic, durable: :true}.freeze
 
