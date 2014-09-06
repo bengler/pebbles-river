@@ -22,7 +22,7 @@ module Pebbles
       def connect
         unless @session
           handle_session_error do
-            session = Bunny::Session.new
+            session = Bunny::Session.new(::Pebbles::River.rabbitmq_options)
             session.start
 
             channel = session.create_channel
@@ -61,7 +61,6 @@ module Pebbles
 
       def queue(options = {})
         raise ArgumentError.new 'Queue must be named' unless options[:name]
-        options = options.dup
 
         queue_opts = {durable: true}
         if (ttl = options[:ttl])

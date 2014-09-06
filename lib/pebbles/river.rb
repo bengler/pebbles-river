@@ -16,3 +16,15 @@ require_relative "river/river"
 require_relative "river/compatibility"
 require_relative "river/rate_limiter"
 require_relative "river/daemon_helper"
+
+module Pebbles::River
+
+  def self.rabbitmq_options
+    @rabbitmq_options ||= {}.freeze
+  end
+
+  def self.rabbitmq_options=(options)
+    @rabbitmq_options = options.freeze
+  end
+
+end
