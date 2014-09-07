@@ -51,9 +51,11 @@ module Pebbles
       end
 
       def publish(options = {})
-        connect
         handle_session_error(SendFailure) do
-          exchange.publish(options.to_json,
+          connect
+
+          # Note: Using self.exchange so it can be stubbed in tests
+          self.exchange.publish(options.to_json,
             persistent: options.fetch(:persistent, true),
             key: Routing.routing_key_for(options.slice(:event, :uid)))
         end
@@ -117,6 +119,7 @@ module Pebbles
 
         CONNECTION_EXCEPTIONS = [
           Bunny::ConnectionError,
+          Bunny::ConnectionClosedError,
           Bunny::ForcedChannelCloseError,
           Bunny::ForcedConnectionCloseError,
           Bunny::ServerDownError,

@@ -202,6 +202,7 @@ module Pebbles
           Bunny::ConnectionError,
           Bunny::ForcedChannelCloseError,
           Bunny::ForcedConnectionCloseError,
+          Bunny::ConnectionClosedError,
           Bunny::ServerDownError,
           Bunny::ProtocolError,
           # These should be caught by Bunny, but apparently aren't.

@@ -13,6 +13,7 @@ describe Pebbles::River::River do
 
   CONNECTION_EXCEPTIONS = [
     Bunny::ConnectionError,
+    Bunny::ConnectionClosedError,
     Bunny::ForcedChannelCloseError,
     Bunny::ForcedConnectionCloseError,
     Bunny::ServerDownError,
@@ -100,7 +101,7 @@ describe Pebbles::River::River do
 
     CONNECTION_EXCEPTIONS.each do |exception_class|
       context "on temporary failure with #{exception_class}" do
-        it "retries sending until success" do
+        it "reconnects and retries sending until success" do
           exchange = double('exchange')
 
           count = 0
@@ -111,6 +112,7 @@ describe Pebbles::River::River do
             end
           end
 
+          subject.stub(:connect) { }
           subject.stub(:exchange) { exchange }
           subject.stub(:sleep) { }
           Timeout.stub(:timeout) { |&block|
@@ -119,10 +121,11 @@ describe Pebbles::River::River do
           expect(Timeout).to receive(:timeout).at_least(1).times
 
           expect(subject).to receive(:sleep).at_least(2).times
+          expect(subject).to receive(:connect).at_least(3).times
 
           expect(exchange).to receive(:publish).at_least(2).times
 
-          subject.publish({event: 'explode', uid: 'thing:rspec$1'})
+          subject.publish(event: 'explode', uid: 'thing:rspec$1')
         end
       end
     end
