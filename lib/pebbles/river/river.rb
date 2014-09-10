@@ -20,7 +20,8 @@ module Pebbles
       end
 
       def connect
-        unless @session
+        unless @session and @channel and @exchange
+          disconnect
           handle_session_error do
             session = Bunny::Session.new(::Pebbles::River.rabbitmq_options)
             session.start
@@ -35,7 +36,6 @@ module Pebbles
       end
 
       def disconnect
-        @exchange = nil
         if @channel
           begin
             @channel.close
@@ -52,6 +52,7 @@ module Pebbles
           end
           @session = nil
         end
+        @exchange = nil
       end
 
       def publish(options = {})
