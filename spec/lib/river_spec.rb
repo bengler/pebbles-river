@@ -154,7 +154,7 @@ describe Pebbles::River::River do
           }
           expect(Timeout).to receive(:timeout).at_least(1).times
 
-          expect(subject).to receive(:disconnect).exactly(11).times
+          expect(subject).to receive(:disconnect).at_least(11).times
 
           expect(-> { subject.publish({event: 'explode', uid: 'thing:rspec$1'})}).to raise_error do |e|
             e.should be Pebbles::River::SendFailure
