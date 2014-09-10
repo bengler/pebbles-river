@@ -37,7 +37,11 @@ module Pebbles
       def disconnect
         @exchange = nil
         if @channel
-          @channel.close
+          begin
+            @channel.close
+          rescue *CONNECTION_EXCEPTIONS
+            # Ignore
+          end
           @channel = nil
         end
         if @session
@@ -96,6 +100,7 @@ module Pebbles
             begin
               yield
             rescue *CONNECTION_EXCEPTIONS => exception
+              disconnect
               last_exception = exception
               retry_count += 1
               backoff(retry_count)
