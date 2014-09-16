@@ -3,6 +3,8 @@ module Pebbles
 
     class ConfigurationError < StandardError; end
 
+    # A simple supervisor which runs workers in preforked pools of child processes.
+    # If a worker dies, a new child process is created.
     class Supervisor < Servolux::Server
 
       def initialize(name, options = {})
@@ -13,7 +15,6 @@ module Pebbles
         @worker_count = options[:worker_count] || 1
 
         @prefork_pools = []
-
         @worker_modules = []
       end
 
@@ -22,30 +23,41 @@ module Pebbles
           raise ConfigurationError.new("No listeners configured")
         end
 
-        @worker_modules.each do |m|
+        @worker_modules.each do |min_worker_count, m|
           @prefork_pools.push(
             Servolux::Prefork.new(
-              min_workers: @worker_count,
+              min_workers: min_worker_count,
               module: m))
         end
       end
 
+      # Add a listener. The listener must support the `#call(message)` method.
+      # The queue specification contains the parameters naming the queue and
+      # so on; see `Pebbles::River::River#queue`. The worker options:
+      #
+      # * `managed_acking`: Passed along to `Pebbles::River::Worker.new`.
+      # * `worker_count`: Number of parallel workers to run. Defaults to the
+      #   global setting.
+      #
       def add_listener(listener, queue_spec, worker_options = {})
-        worker = Pebbles::River::Worker.new(listener, {
+        worker_options.assert_valid_keys(:managed_acking, :worker_count)
+
+        worker = Pebbles::River::Worker.new(listener,
           queue: queue_spec,
+          managed_acking: worker_options[:managed_acking],
           on_exception: ->(e) {
             if logger.respond_to?(:exception)
               logger.exception(e)
             else
               logger.error("Exception #{e.class}: #{e} #{e.backtrace.join("\n")}")
             end
-          }
-        }.merge(worker_options))
+          })
 
         process_name = "#{@name}: queue worker: #{queue_spec[:name]}"
         logger = @logger
+        worker_count = worker_options[:worker_count] || @worker_count
 
-        @worker_modules.push(Module.new {
+        @worker_modules.push([worker_count, Module.new {
           define_method :execute do
             $0 = process_name
             trap('TERM') do
@@ -55,7 +67,7 @@ module Pebbles
             end
             worker.run
           end
-        })
+        }])
       end
 
       # From Servolux::Server
