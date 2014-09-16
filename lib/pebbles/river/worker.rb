@@ -43,7 +43,11 @@ module Pebbles
         end
 
         @queue_options = (options[:queue] || {}).freeze
-        @managed_acking = !!options.fetch(:managed_acking, true)
+        if options[:managed_acking] != nil
+          @managed_acking = !!options.fetch(:managed_acking, true)
+        else
+          @managed_acking = true
+        end
         @on_exception = options[:on_exception] || ->(*args) { }
         @handler = handler
         @river = River.new
