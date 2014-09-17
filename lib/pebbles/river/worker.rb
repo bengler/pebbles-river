@@ -181,6 +181,10 @@ module Pebbles
             end
 
             @river.disconnect
+          rescue Timeout::Error
+            if @logger
+              @logger.error("Timeout polling for messages (ignoring)")
+            end
           rescue => exception
             if @logger
               @logger.error("Exception (#{exception.class}) while handling message: #{exception}")
