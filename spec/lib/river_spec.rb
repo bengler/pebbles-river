@@ -14,6 +14,7 @@ describe Pebbles::River::River do
   CONNECTION_EXCEPTIONS = [
     Bunny::ConnectionError,
     Bunny::ConnectionClosedError,
+    Bunny::ChannelAlreadyClosed,
     Bunny::ForcedChannelCloseError,
     Bunny::ForcedConnectionCloseError,
     Bunny::ServerDownError,

@@ -123,12 +123,6 @@ module Pebbles
 
         EXCHANGE_OPTIONS = {type: :topic, durable: :true}.freeze
 
-        CONNECTION_EXCEPTIONS = [
-          Bunny::Exception,
-          # These should be caught by Bunny, but apparently aren't.
-          Errno::ECONNRESET
-        ].freeze
-
     end
 
   end

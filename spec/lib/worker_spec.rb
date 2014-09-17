@@ -215,6 +215,7 @@ describe Worker do
 
       [
         Bunny::ConnectionError,
+        Bunny::ChannelAlreadyClosed,
         Bunny::ForcedChannelCloseError,
         Bunny::ForcedConnectionCloseError,
         Bunny::ServerDownError,
