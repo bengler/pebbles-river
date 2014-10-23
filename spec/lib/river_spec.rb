@@ -158,8 +158,8 @@ describe Pebbles::River::River do
           expect(subject).to receive(:disconnect).at_least(11).times
 
           expect(-> { subject.publish({event: 'explode', uid: 'thing:rspec$1'})}).to raise_error do |e|
-            e.should be Pebbles::River::SendFailure
-            e.exception.should be exception_class
+            expect(e).to be_instance_of Pebbles::River::SendFailure
+            expect(e.connection_exception.class).to eq exception_class
           end
 
           expect(sleeps[0, 9]).to eq [1, 2, 4, 8, 10, 10, 10, 10, 10]

@@ -229,7 +229,7 @@ describe Worker do
 
           let :handler do
             handler = double('handler')
-            handler.stub(:call).and_return {
+            allow(handler).to receive(:call) {
               raise exception
             }
             handler
