@@ -108,11 +108,11 @@ module Pebbles
               retry
             end
           end
-        rescue Timeout::Error => timeout
+        rescue Timeout::Error => timeout_exception
           if last_exception
             raise exception_klass.new(last_exception.message, last_exception)
           else
-            raise exception_klass.new("Timeout", nil)
+            raise exception_klass.new("Timeout", timeout_exception)
           end
         end
 
