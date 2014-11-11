@@ -109,8 +109,11 @@ module Pebbles
             end
           end
         rescue Timeout::Error => timeout
-          last_exception ||= timeout
-          raise exception_klass.new(last_exception.message, last_exception)
+          if last_exception
+            raise exception_klass.new(last_exception.message, last_exception)
+          else
+            raise exception_klass.new("Timeout", nil)
+          end
         end
 
         def backoff(iteration)
