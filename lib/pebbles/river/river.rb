@@ -117,9 +117,9 @@ module Pebbles
           sleep([(1.0 / 2.0 * (2.0 ** [30, iteration].min - 1.0)).ceil, MAX_BACKOFF_SECONDS].min)
         end
 
-        MAX_RETRY_TIMEOUT = 10
+        MAX_RETRY_TIMEOUT = 30
 
-        MAX_BACKOFF_SECONDS = MAX_RETRY_TIMEOUT
+        MAX_BACKOFF_SECONDS = 10
 
         EXCHANGE_OPTIONS = {type: :topic, durable: :true}.freeze
 
