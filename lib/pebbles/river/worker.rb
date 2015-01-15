@@ -119,7 +119,7 @@ module Pebbles
 
         def process_next
           with_exceptions do
-            queue.pop(ack: true) do |delivery_info, properties, content|
+            queue.pop(manual_ack: true) do |delivery_info, properties, content|
               if delivery_info
                 process_message(delivery_info, properties, content)
                 return true
