@@ -20,7 +20,7 @@ Gem::Specification.new do |spec|
   spec.test_files    = spec.files.grep(%r{^(test|spec|features)/})
   spec.require_paths = ["lib"]
 
-  spec.add_runtime_dependency 'pebblebed', '~> 0.3.0'
+  spec.add_runtime_dependency 'pebblebed', '>= 0.3.0'
   spec.add_runtime_dependency 'bunny', '= 1.6.0.rc2'
   spec.add_runtime_dependency 'activesupport', '>= 3.0'
   spec.add_runtime_dependency 'servolux', '~> 0.10'

@@ -13,9 +13,9 @@ module Pebbles
         options.assert_valid_keys(:logger, :pid_file, :worker_count, :worker)
 
         @worker_count = options[:worker_count] || 1
-
         @prefork_pools = []
         @worker_modules = []
+        @recovering = true
       end
 
       def start_workers
@@ -23,11 +23,13 @@ module Pebbles
           raise ConfigurationError.new("No listeners configured")
         end
 
-        @worker_modules.each do |min_worker_count, m|
-          @prefork_pools.push(
-            Servolux::Prefork.new(
-              min_workers: min_worker_count,
-              module: m))
+        @worker_modules.each do |name, min_worker_count, m|
+          if min_worker_count > 0
+            prefork = Servolux::Prefork.new(min_workers: min_worker_count, module: m)
+            @prefork_pools.push([name, prefork])
+          else
+            logger.info "[#{name}] Workers disabled"
+          end
         end
       end
 
@@ -53,15 +55,17 @@ module Pebbles
             end
           })
 
-        process_name = "#{@name}: queue worker: #{queue_spec[:name]}"
+        name = queue_spec[:name]
+
+        process_name = "#{@name}: queue worker: #{name}"
         logger = @logger
         worker_count = worker_options[:worker_count] || @worker_count
 
-        @worker_modules.push([worker_count, Module.new {
+        @worker_modules.push([name, worker_count, Module.new {
           define_method :execute do
             $0 = process_name
             trap('TERM') do
-              logger.info "Worker received TERM"
+              logger.info "[#{name}] Worker received TERM, stopping"
               worker.stop
               exit(0)
             end
@@ -72,11 +76,12 @@ module Pebbles
 
       # From Servolux::Server
       def before_starting
-        $0 = "#{name}: master"
+        $0 = "#{self.name}: master"
 
         logger.info "Starting workers"
-        @prefork_pools.each do |prefork|
-          prefork.start(1)
+        @prefork_pools.each do |name, prefork|
+          logger.info "[#{name}] Starting workers"
+          prefork.ensure_worker_pool_size
         end
       end
 
@@ -92,9 +97,7 @@ module Pebbles
 
       # From Servolux::Server
       def run
-        @prefork_pools.each do |prefork|
-          prefork.ensure_worker_pool_size
-        end
+        ensure_workers
       rescue => e
         if logger.respond_to? :exception
           logger.exception(e)
@@ -106,12 +109,51 @@ module Pebbles
 
       private
 
+        def ensure_workers
+          complete = true
+          @prefork_pools.each do |name, prefork|
+            if prefork.below_minimum_workers?
+              complete = false
+            else
+              had_workers = true
+            end
+
+            prefork.prune_workers
+
+            if had_workers and prefork.below_minimum_workers?
+              logger.error "[#{name}] One or more worker died"
+            end
+
+            while prefork.below_minimum_workers? do
+              @recovering = true
+              logger.info "[#{name}] Too few workers (" \
+                "#{prefork.live_worker_count} alive, #{prefork.dead_worker_count} dead), spawning another"
+              prefork.add_workers(1)
+            end
+          end
+
+          if @recovering and complete
+            @recovering = false
+            logger.info "All workers up"
+          end
+        end
+
         def shutdown_workers
-          logger.info "Shutting down all workers"
-          @prefork_pools.each(&:stop)
+          logger.info "Telling all workers to shut down"
+          @prefork_pools.each do |name, prefox|
+            prefox.stop
+          end
+
+          last_logged_time = Time.now
           loop do
-            break if @prefork_pools.all? { |prefork| prefork.live_worker_count <= 0 }
-            logger.info "Waiting for workers to quit"
+            count = @prefork_pools.inject(0) { |sum, (name, prefork)| sum + prefork.live_worker_count }
+            break if count == 0
+
+            if Time.now - last_logged_time > 5
+              logger.info "Still waiting for #{count} workers to quit..."
+              last_logged_time = Time.now
+            end
+
             sleep 0.25
           end
         end
