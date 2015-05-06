@@ -6,7 +6,7 @@ module Pebbles
       attr_reader :content
 
       def initialize(message, content)
-        super(message)
+        super("#{message}. Content was: #{content.inspect}")
         @content = content
       end
 
