@@ -8,7 +8,7 @@ require 'spec_helper'
 describe Pebbles::River::River do
 
   subject do
-    Pebbles::River::River.new('whatever')
+    Pebbles::River::River.new(environment: 'whatever')
   end
 
   CONNECTION_EXCEPTIONS = [
@@ -42,7 +42,7 @@ describe Pebbles::River::River do
   end
 
   context "in production" do
-    subject { Pebbles::River::River.new('production') }
+    subject { Pebbles::River::River.new(environment: 'production') }
 
     it "doesn't append the thing" do
       subject.connect

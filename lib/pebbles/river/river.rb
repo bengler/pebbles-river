@@ -7,12 +7,14 @@ module Pebbles
       attr_reader :exchange
       attr_reader :session
       attr_reader :channel
+      attr_reader :prefetch
 
       def initialize(options = {})
         options = {environment: options} if options.is_a?(String)  # Backwards compatibility
 
         @environment = (options[:environment] || ENV['RACK_ENV'] || 'development').dup.freeze
         @last_connect_attempt = nil
+        @prefetch = options[:prefetch]
       end
 
       def connected?
@@ -27,6 +29,7 @@ module Pebbles
             session.start
 
             channel = session.create_channel
+            channel.prefetch(@prefetch) if @prefetch
 
             exchange = channel.exchange(exchange_name, EXCHANGE_OPTIONS.dup)
 

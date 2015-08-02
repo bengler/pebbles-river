@@ -25,6 +25,7 @@ module Pebbles
       #   is automatically acked unless the handler returns false or the handler
       #   raises an exception, in which case it's nacked. If false, the handler
       #   must do the ack/nacking. Defaults to true.
+      # * `prefetch`: If specified, sets channel's prefetch count.
       #
       # The handler must implement `call(payload, extra)`, where the payload is
       # the message payload, and the extra argument contains message metadata as
@@ -36,7 +37,8 @@ module Pebbles
           :queue,
           :logger,
           :on_exception,
-          :managed_acking)
+          :managed_acking,
+          :prefetch)
 
         unless handler.respond_to?(:call)
           raise ArgumentError.new('Handler must implement #call protocool')
@@ -50,7 +52,7 @@ module Pebbles
         end
         @on_exception = options[:on_exception] || ->(*args) { }
         @handler = handler
-        @river = River.new
+        @river = River.new(options.slice(:prefetch))
         @next_event_time = Time.now
         @rate_limiter = RateLimiter.new(1.0, 10)
         @logger = options.fetch(:logger, Logger.new($stderr))
