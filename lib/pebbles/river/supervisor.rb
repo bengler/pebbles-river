@@ -35,31 +35,33 @@ module Pebbles
 
       # Add a listener. The listener must support the `#call(message)` method.
       # The queue specification contains the parameters naming the queue and
-      # so on; see `Pebbles::River::River#queue`. The worker options:
+      # so on; see `Pebbles::River::River#queue`. The worker options are the
+      # same as those used by `Pebbles::River::Worker.new`, plus:
       #
-      # * `managed_acking`: Passed along to `Pebbles::River::Worker.new`.
       # * `worker_count`: Number of parallel workers to run. Defaults to the
       #   global setting.
       #
       def add_listener(listener, queue_spec, worker_options = {})
-        worker_options.assert_valid_keys(:managed_acking, :worker_count)
+        worker_options = worker_options.dup
 
-        worker = Pebbles::River::Worker.new(listener,
-          queue: queue_spec,
-          managed_acking: worker_options[:managed_acking],
+        worker_count = worker_options.delete(:worker_count) || @worker_count
+
+        worker_options = {
           on_exception: ->(e) {
             if logger.respond_to?(:exception)
               logger.exception(e)
             else
               logger.error("Exception #{e.class}: #{e} #{e.backtrace.join("\n")}")
             end
-          })
+          }
+        }.merge(worker_options)
+        worker_options[:queue] = queue_spec
+
+        worker = Pebbles::River::Worker.new(listener, worker_options)
 
         name = queue_spec[:name]
-
         process_name = "#{@name}: queue worker: #{name}"
         logger = @logger
-        worker_count = worker_options[:worker_count] || @worker_count
 
         @worker_modules.push([name, worker_count, Module.new {
           define_method :execute do
