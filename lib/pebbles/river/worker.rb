@@ -50,6 +50,7 @@ module Pebbles
         else
           @managed_acking = true
         end
+        @dead_lettered = !!@queue_options[:dead_letter_routing_key]
         @on_exception = options[:on_exception] || ->(*args) { }
         @handler = handler
         @river = River.new(options.slice(:prefetch))
@@ -137,7 +138,7 @@ module Pebbles
             message = Message.new(content, delivery_info, queue)
           rescue => exception
             ignore_exceptions do
-              queue.channel.nack(delivery_info, false, true)
+              reject(delivery_info)
             end
             raise exception
           else
@@ -148,7 +149,7 @@ module Pebbles
             rescue => exception
               if @managed_acking
                 ignore_exceptions do
-                  message.nack
+                  reject(delivery_info)
                 end
               end
               raise exception
@@ -156,13 +157,21 @@ module Pebbles
               if @managed_acking
                 case result
                   when false
-                    message.nack
+                    reject(delivery_info)
                   else
                     message.ack
                 end
               end
             end
           end
+        end
+
+        def reject(delivery_info)
+          # Normally requeue, except if we are dead-lettering to another queue, where
+          # requeue = false means to bounce it to DLX.
+          requeue = !@dead_lettered
+
+          queue.channel.reject(delivery_info.delivery_tag.to_i, requeue)
         end
 
         def with_exceptions(&block)
