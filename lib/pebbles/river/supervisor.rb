@@ -47,6 +47,7 @@ module Pebbles
         worker_count = worker_options.delete(:worker_count) || @worker_count
 
         worker_options = {
+          logger: @logger,
           on_exception: ->(e) {
             if logger.respond_to?(:exception)
               logger.exception(e)
