@@ -60,10 +60,15 @@ module Pebbles
 
         worker = Pebbles::River::Worker.new(listener, worker_options)
 
+        runner = ->() {
+          with_exception_logging do
+            worker.run
+          end
+        }
+
         name = queue_spec[:name]
         process_name = "#{@name}: queue worker: #{name}"
         logger = @logger
-
         @worker_modules.push([name, worker_count, Module.new {
           define_method :execute do
             $0 = process_name
@@ -72,7 +77,7 @@ module Pebbles
               worker.stop
               exit(0)
             end
-            worker.run
+            runner.call
           end
         }])
       end
@@ -100,14 +105,10 @@ module Pebbles
 
       # From Servolux::Server
       def run
-        ensure_workers
-      rescue => e
-        if logger.respond_to? :exception
-          logger.exception(e)
-        else
-          logger.error(e.inspect)
-          logger.error(e.backtrace.join("\n"))
+        with_exception_logging do
+          ensure_workers
         end
+        sleep 1
       end
 
       private
@@ -159,6 +160,18 @@ module Pebbles
 
             sleep 0.25
           end
+        end
+
+        def with_exception_logging(&block)
+          yield
+        rescue => e
+          if logger.respond_to? :exception
+            logger.exception(e)
+          else
+            logger.error(e.inspect)
+            logger.error(e.backtrace.join("\n"))
+          end
+          raise
         end
 
     end
