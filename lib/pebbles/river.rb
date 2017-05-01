@@ -18,12 +18,6 @@ require_relative "river/daemon_helper"
 
 module Pebbles::River
 
-  CONNECTION_EXCEPTIONS = [
-    Bunny::Exception,
-    # These should be caught by Bunny, but apparently aren't.
-    Errno::ECONNRESET
-  ].freeze
-
   def self.rabbitmq_options
     @rabbitmq_options ||= {}.freeze
   end

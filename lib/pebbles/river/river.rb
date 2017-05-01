@@ -46,9 +46,7 @@ module Pebbles
         if @channel
           begin
             @channel.close
-          rescue Bunny::ChannelAlreadyClosed
-            # Ignore
-          rescue *CONNECTION_EXCEPTIONS
+          rescue Bunny::Exception
             # Ignore
           end
           @channel = nil
@@ -56,7 +54,7 @@ module Pebbles
         if @session
           begin
             @session.stop
-          rescue *CONNECTION_EXCEPTIONS
+          rescue Bunny::Exception
             # Ignore
           end
           @session = nil
@@ -112,9 +110,9 @@ module Pebbles
             retry_count = 0
             begin
               yield
-            rescue *CONNECTION_EXCEPTIONS => exception
+            rescue Bunny::Exception => e
               disconnect
-              last_exception = exception
+              last_exception = e
               retry_count += 1
               backoff(retry_count)
               retry

@@ -11,17 +11,6 @@ describe Pebbles::River::River do
     Pebbles::River::River.new(environment: 'whatever')
   end
 
-  CONNECTION_EXCEPTIONS = [
-    Bunny::ConnectionError,
-    Bunny::ConnectionClosedError,
-    Bunny::ChannelAlreadyClosed,
-    Bunny::ForcedChannelCloseError,
-    Bunny::ForcedConnectionCloseError,
-    Bunny::ServerDownError,
-    Bunny::ProtocolError,
-    Errno::ECONNRESET
-  ]
-
   after(:each) do
     if (channel = subject.channel)
       channel.queues.each do |name, queue|
@@ -98,73 +87,6 @@ describe Pebbles::River::River do
       sleep(0.1)
       _, _, payload = queue.pop
       JSON.parse(payload)['uid'].should eq('klass:path$1')
-    end
-
-    CONNECTION_EXCEPTIONS.each do |exception_class|
-      context "on temporary failure with #{exception_class}" do
-        it "reconnects and retries sending until success" do
-          exchange = double('exchange')
-
-          count = 0
-          exchange.stub(:publish) do
-            count += 1
-            if count < 3
-              raise create_exception(exception_class)
-            end
-          end
-
-          subject.stub(:connect) { }
-          subject.stub(:exchange) { exchange }
-          subject.stub(:sleep) { }
-          Timeout.stub(:timeout) { |&block|
-            block.call
-          }
-          expect(Timeout).to receive(:timeout).at_least(1).times
-
-          expect(subject).to receive(:sleep).at_least(2).times
-          expect(subject).to receive(:connect).exactly(3).times
-          expect(subject).to receive(:disconnect).exactly(3).times
-
-          expect(exchange).to receive(:publish).at_least(2).times
-
-          subject.publish(event: 'explode', uid: 'thing:rspec$1')
-        end
-      end
-    end
-
-    CONNECTION_EXCEPTIONS.each do |exception_class|
-      context "on permanent failure with #{exception_class}" do
-        it "retries with exponential backoff until timeout and gives up with SendFailure" do
-          exchange = double('exchange')
-          exchange.stub(:publish) do
-            raise create_exception(exception_class)
-          end
-          subject.stub(:exchange) { exchange }
-
-          count, sleeps = 0, []
-          subject.stub(:sleep) { |t|
-            count += 1
-            if count >= 10
-              raise Timeout::Error
-            end
-            sleeps.push(t)
-          }
-
-          Timeout.stub(:timeout) { |&block|
-            block.call
-          }
-          expect(Timeout).to receive(:timeout).at_least(1).times
-
-          expect(subject).to receive(:disconnect).at_least(11).times
-
-          expect(-> { subject.publish({event: 'explode', uid: 'thing:rspec$1'})}).to raise_error do |e|
-            expect(e).to be_instance_of Pebbles::River::SendFailure
-            expect(e.connection_exception.class).to eq exception_class
-          end
-
-          expect(sleeps[0, 9]).to eq [1, 2, 4, 8, 10, 10, 10, 10, 10]
-        end
-      end
     end
 
     context 'on connection timeout' do

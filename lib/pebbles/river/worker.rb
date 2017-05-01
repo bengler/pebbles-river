@@ -136,23 +136,23 @@ module Pebbles
         def process_message(delivery_info, properties, content)
           begin
             message = Message.new(content, delivery_info, queue)
-          rescue => exception
+          rescue => e
             ignore_exceptions do
               reject(delivery_info)
             end
-            raise exception
+            raise e
           else
             begin
               result = @handler.call(message)
-            rescue *CONNECTION_EXCEPTIONS
+            rescue Bunny::Exception
               raise
-            rescue => exception
+            rescue => e
               if @managed_acking
                 ignore_exceptions do
                   reject(delivery_info)
                 end
               end
-              raise exception
+              raise e
             else
               if @managed_acking
                 case result
@@ -177,26 +177,19 @@ module Pebbles
         def with_exceptions(&block)
           begin
             yield
-          rescue *CONNECTION_EXCEPTIONS => exception
-            if @logger
-              @logger.error("Connection error (#{exception.class}): #{exception}")
-            end
-            @rate_limiter.increment
-            @queue = nil
-            @river.disconnect
+          rescue Bunny::Exception
+            raise
           rescue Timeout::Error
             if @logger
               @logger.error("Timeout polling for messages (ignoring)")
             end
-          rescue => exception
+          rescue => e
             if @logger
-              @logger.error("Exception (#{exception.class}) while handling message: #{exception}")
+              @logger.error("Exception (#{e.class}) while handling message: #{e}")
             end
-
             @rate_limiter.increment
-
             ignore_exceptions do
-              @on_exception.call(exception)
+              @on_exception.call(e)
             end
           end
         end

@@ -203,71 +203,36 @@ describe Worker do
         end
       end
 
-      [
-        Bunny::ConnectionError,
-        Bunny::ChannelAlreadyClosed,
-        Bunny::ForcedChannelCloseError,
-        Bunny::ForcedConnectionCloseError,
-        Bunny::ServerDownError,
-        Bunny::ProtocolError,
-        Errno::ECONNRESET
-      ].each do |exception_class|
-        context "connection exception #{exception_class}" do
-          let :exception do
-            create_exception(exception_class)
-          end
+      context "connection exception" do
+        let :exception do
+          Bunny::ConnectionError.new("error!")
+        end
 
-          let :handler do
-            handler = double('handler')
-            allow(handler).to receive(:call) {
-              raise exception
-            }
-            handler
-          end
+        let :handler do
+          handler = double('handler')
+          allow(handler).to receive(:call) {
+            raise exception
+          }
+          handler
+        end
 
-          it "performs connection reset on #{exception_class}" do
-            expect(handler).to receive(:call).with(message)
-
-            expect(river).to receive(:connected?).with(no_args).at_least(1).times
-            expect(river).to_not receive(:connect)
-            expect(river).to receive(:queue).with({name: 'foo'})
-            expect(river).to receive(:disconnect).at_least(1).times
-
+        it "re-raises exception" do
+          expect(handler).to receive(:call).with(message)
+          expect(->() {
             subject.new(handler, queue: {name: 'foo'}).run_once
-          end
+          }).to raise_error(Bunny::ConnectionError)
+        end
 
-          it "does not call #on_exception on connection error" do
-            on_exception_callback = double('on_connection_error')
-            on_exception_callback.stub(:call) { }
-            expect(on_exception_callback).to_not receive(:call)
-
-            expect(handler).to receive(:call).at_least(1).times
-
-            expect(river).to receive(:connected?).with(no_args).at_least(1).times
-            expect(river).to_not receive(:connect)
-            expect(river).to receive(:disconnect).at_least(1).times
-
+        it "does not call #on_exception on connection error" do
+          on_exception_callback = double('on_connection_error')
+          on_exception_callback.stub(:call) { }
+          expect(on_exception_callback).to_not receive(:call)
+          expect(handler).to receive(:call).at_least(1).times
+          expect(->() {
             subject.new(handler,
               queue: {name: 'foo'},
               on_exception: on_exception_callback).run_once
-          end
-
-          it "logs error to logger" do
-            expect(handler).to receive(:call).with(message)
-
-            logger = double('logger')
-            logger.stub(:error) { }
-
-            # TODO: Test exception contents here
-            expect(logger).to receive(:error).
-              with(/.*/).at_least(1).times
-
-            river.stub(:disconnect)
-
-            subject.new(handler,
-              queue: {name: 'foo'},
-              logger: logger).run_once
-          end
+          }).to raise_error(Bunny::ConnectionError)
         end
       end
 
