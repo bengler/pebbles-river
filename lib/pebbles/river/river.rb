@@ -46,6 +46,8 @@ module Pebbles
         if @channel
           begin
             @channel.close
+          rescue Bunny::ChannelAlreadyClosed
+            # Ignore
           rescue *CONNECTION_EXCEPTIONS
             # Ignore
           end
