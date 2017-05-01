@@ -32,6 +32,7 @@ module Pebbles
         @queue = queue
         @delivery_info = delivery_info
         @payload = self.class.deserialize_payload(content)
+        @replied = false
       end
 
       def ==(other)
@@ -45,11 +46,17 @@ module Pebbles
       end
 
       def ack
-        @queue.channel.ack(delivery_tag)
+        if !@replied && (tag = delivery_tag)
+          @queue.channel.ack(tag)
+          @replied = true
+        end
       end
 
       def nack
-        @queue.channel.nack(delivery_tag, false, true)
+        if !@replied && (tag = delivery_tag)
+          @queue.channel.nack(tag, false, true)
+          @replied = true
+        end
       end
 
     end
