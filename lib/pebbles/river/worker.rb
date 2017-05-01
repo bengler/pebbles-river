@@ -181,16 +181,8 @@ module Pebbles
             if @logger
               @logger.error("Connection error (#{exception.class}): #{exception}")
             end
-
             @rate_limiter.increment
-
-            if @queue
-              ignore_exceptions do
-                @queue.close
-              end
-              @queue = nil
-            end
-
+            @queue = nil
             @river.disconnect
           rescue Timeout::Error
             if @logger

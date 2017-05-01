@@ -56,6 +56,7 @@ describe Worker do
 
   let :channel do
     channel = double('Bunny::Channel')
+    channel.stub(:reject) { }
     channel.stub(:ack) { }
     channel.stub(:nack) { }
     channel
@@ -63,7 +64,6 @@ describe Worker do
 
   let :queue do
     queue = double('Bunny::Queue')
-    queue.stub(:close) { nil }
     queue.stub(:pop) { |&block|
       block.call(*raw_message)
     }
@@ -151,8 +151,6 @@ describe Worker do
 
     context 'when handler is successful' do
       it 'acks the message' do
-        expect(queue).to_not receive(:close)
-
         expect(channel).to receive(:ack).at_least(1).times
         expect(channel).to_not receive(:nack)
 
@@ -166,9 +164,7 @@ describe Worker do
     context 'when handler returns false' do
       if false  # Needs Bunny 0.9+
         it 'nacks the message' do
-          expect(queue).to_not receive(:close)
-
-          expect(channel).to receive(:nack).at_least(1).times
+            expect(channel).to receive(:nack).at_least(1).times
           expect(channel).to_not receive(:ack)
 
           expect(river).to receive(:connected?).with(no_args).at_least(1).times
@@ -179,9 +175,7 @@ describe Worker do
       else
         it 'leaves the message un-acked' do
           expect(queue).to_not receive(:ack)
-          expect(queue).to_not receive(:close)
-
-          expect(river).to receive(:connected?).with(no_args).at_least(1).times
+            expect(river).to receive(:connected?).with(no_args).at_least(1).times
           expect(river).to_not receive(:connect)
 
           subject.new(false_handler, queue: {name: 'foo'}).run_once
@@ -200,16 +194,12 @@ describe Worker do
       if false  # Needs Bunny 0.9+
         it 'nacks the message' do
           expect(queue).to receive(:nack).at_least(1).times
-          expect(queue).to_not receive(:close)
-
-          subject.new(io_error_raising_handler, queue: {name: 'foo'}).run_once
+            subject.new(io_error_raising_handler, queue: {name: 'foo'}).run_once
         end
       else
         it 'leaves the message un-acked' do
           expect(queue).to_not receive(:ack)
-          expect(queue).to_not receive(:close)
-
-          subject.new(io_error_raising_handler, queue: {name: 'foo'}).run_once
+            subject.new(io_error_raising_handler, queue: {name: 'foo'}).run_once
         end
       end
 
@@ -236,8 +226,6 @@ describe Worker do
           end
 
           it "performs connection reset on #{exception_class}" do
-            expect(queue).to receive(:close).at_least(1).times
-
             expect(handler).to receive(:call).with(message)
 
             expect(river).to receive(:connected?).with(no_args).at_least(1).times
@@ -252,8 +240,6 @@ describe Worker do
             on_exception_callback = double('on_connection_error')
             on_exception_callback.stub(:call) { }
             expect(on_exception_callback).to_not receive(:call)
-
-            expect(queue).to receive(:close).at_least(1).times
 
             expect(handler).to receive(:call).at_least(1).times
 
@@ -287,7 +273,6 @@ describe Worker do
 
       context 'non-connection exception' do
         it "calls #on_exception" do
-          expect(queue).to_not receive(:close)
           expect(on_exception_callback).to receive(:call).with(io_error)
 
           subject.new(io_error_raising_handler,
