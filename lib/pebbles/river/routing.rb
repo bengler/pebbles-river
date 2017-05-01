@@ -15,13 +15,11 @@ module Pebbles
       def self.binding_routing_keys_for(options)
         options.assert_valid_keys(:path, :class, :event)
         keys = []
-        if options[:event] or options[:path] or options[:class]
-          element_to_routing_key_parts(options[:event]).each do |event|
-            element_to_routing_key_parts(options[:class]).each do |klass|
-              element_to_routing_key_parts(options[:path]).each do |pathspec|
-                path_to_routing_key_parts(pathspec).each do |path|
-                  keys << [event, klass, path].join('._.')
-                end
+        element_to_routing_key_parts(options[:event]).each do |event|
+          element_to_routing_key_parts(options[:class]).each do |klass|
+            element_to_routing_key_parts(options[:path]).each do |pathspec|
+              path_to_routing_key_parts(pathspec).each do |path|
+                keys << [event, klass, path].join('._.')
               end
             end
           end

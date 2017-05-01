@@ -77,7 +77,7 @@ module Pebbles
 
       def queue(options = {})
         options.assert_valid_keys(:name, :ttl, :event, :path, :klass,
-          :dead_letter_routing_key, :routing_key)
+          :dead_letter_routing_key, :routing_key, :no_default_routing_keys)
 
         raise ArgumentError.new 'Queue must be named' unless options[:name]
 
@@ -96,8 +96,10 @@ module Pebbles
         if (routing_key = options[:routing_key])
           queue.bind(exchange.name, key: routing_key)
         end
-        Routing.binding_routing_keys_for(options.slice(:event, :class, :path)).each do |key|
-          queue.bind(exchange.name, key: key)
+        unless options[:no_default_routing_keys]
+          Routing.binding_routing_keys_for(options.slice(:event, :class, :path)).each do |key|
+            queue.bind(exchange.name, key: key)
+          end
         end
         queue
       end

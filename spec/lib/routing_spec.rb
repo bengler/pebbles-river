@@ -39,7 +39,7 @@ describe Pebbles::River::Routing do
       end
 
       specify 'match nothing if not specified' do
-        expect(subject.binding_routing_keys_for({})).to eq []
+        expect(subject.binding_routing_keys_for({})).to eq ["#._.#._.#"]
       end
     end
 
