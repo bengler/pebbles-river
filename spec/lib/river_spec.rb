@@ -89,28 +89,6 @@ describe Pebbles::River::River do
       JSON.parse(payload)['uid'].should eq('klass:path$1')
     end
 
-    context 'on connection timeout' do
-      it "gives up with SendFailure" do
-        exchange = double('exchange')
-        exchange.stub(:publish) { }
-
-        subject.stub(:exchange) { exchange }
-
-        Timeout.stub(:timeout) { |&block|
-          raise Timeout::Error, "execution expired"
-        }
-        expect(Timeout).to receive(:timeout).exactly(1).times
-
-        expect(-> {
-          subject.publish({event: 'explode', uid: 'thing:rspec$1'})
-        }).to raise_error do |e|
-          expect(e).to be_instance_of Pebbles::River::SendFailure
-          expect(e.message).to eq 'Timeout'
-          expect(e.connection_exception.class).to eq Timeout::Error
-        end
-      end
-    end
-
   end
 
   it "subscribes" do

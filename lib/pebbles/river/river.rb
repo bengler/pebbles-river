@@ -30,15 +30,14 @@ module Pebbles
       def connect
         unless @session and @channel and @exchange
           disconnect
-          handle_session_error do
-            @session = Bunny::Session.new(::Pebbles::River.rabbitmq_options)
-            @session.start
 
-            @channel = @session.create_channel
-            @channel.prefetch(@prefetch) if @prefetch
+          @session = Bunny::Session.new(::Pebbles::River.rabbitmq_options)
+          @session.start
 
-            @exchange = @channel.exchange(@exchange_name, EXCHANGE_OPTIONS.dup)
-          end
+          @channel = @session.create_channel
+          @channel.prefetch(@prefetch) if @prefetch
+
+          @exchange = @channel.exchange(@exchange_name, EXCHANGE_OPTIONS.dup)
         end
       end
 
@@ -63,14 +62,12 @@ module Pebbles
       end
 
       def publish(options = {})
-        handle_session_error(SendFailure) do
-          connect
+        connect
 
-          # Note: Using self.exchange so it can be stubbed in tests
-          self.exchange.publish(options.to_json,
-            persistent: options.fetch(:persistent, true),
-            key: Routing.routing_key_for(options.slice(:event, :uid)))
-        end
+        # Note: Using self.exchange so it can be stubbed in tests
+        self.exchange.publish(options.to_json,
+          persistent: options.fetch(:persistent, true),
+          key: Routing.routing_key_for(options.slice(:event, :uid)))
       end
 
       def queue(options = {})
@@ -103,31 +100,6 @@ module Pebbles
       end
 
       private
-
-        def handle_session_error(exception_klass = ConnectFailure, &block)
-          last_exception = nil
-          Timeout.timeout(MAX_RETRY_TIMEOUT) do
-            retry_count = 0
-            begin
-              yield
-            rescue Bunny::Exception => e
-              disconnect
-              last_exception = e
-              retry_count += 1
-              backoff(retry_count)
-              retry
-            end
-          end
-        rescue Timeout::Error => timeout_exception
-          # Timeouts can screw up the connection, so forcibly close it
-          disconnect
-
-          if last_exception
-            raise exception_klass.new(last_exception.message, last_exception)
-          else
-            raise exception_klass.new("Timeout", timeout_exception)
-          end
-        end
 
         def backoff(iteration)
           sleep([(1.0 / 2.0 * (2.0 ** [30, iteration].min - 1.0)).ceil, MAX_BACKOFF_SECONDS].min)
