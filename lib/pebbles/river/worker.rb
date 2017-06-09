@@ -136,6 +136,11 @@ module Pebbles
         def process_message(delivery_info, properties, content)
           begin
             message = Message.new(content, delivery_info, queue)
+          rescue InvalidPayloadError => e
+            if @logger
+              @logger.error("Invalid payload, ignoring message: #{e}")
+              reject(delivery_info, requeue: false)
+            end
           rescue => e
             ignore_exceptions do
               reject(delivery_info)
@@ -166,11 +171,12 @@ module Pebbles
           end
         end
 
-        def reject(delivery_info)
-          # Normally requeue, except if we are dead-lettering to another queue, where
-          # requeue = false means to bounce it to DLX.
-          requeue = !@dead_lettered
-
+        def reject(delivery_info, requeue: nil)
+          if requeue.nil?
+            # Normally requeue, except if we are dead-lettering to another queue, where
+            # requeue = false means to bounce it to DLX.
+            requeue = !@dead_lettered
+          end
           queue.channel.reject(delivery_info.delivery_tag.to_i, requeue)
         end
 
